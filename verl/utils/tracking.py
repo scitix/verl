@@ -101,6 +101,8 @@ class Tracking:
             SWANLAB_API_KEY = os.environ.get("SWANLAB_API_KEY", None)
             SWANLAB_LOG_DIR = os.environ.get("SWANLAB_LOG_DIR", "swanlog")
             SWANLAB_MODE = os.environ.get("SWANLAB_MODE", "cloud")
+            SWANLAB_RESUME = os.environ.get("SWANLAB_RESUME", "True")
+            SWANLAB_ID = os.environ.get("SWANLAB_ID", None)
             if SWANLAB_API_KEY:
                 swanlab.login(SWANLAB_API_KEY)  # NOTE: previous login information will be overwritten
 
@@ -112,6 +114,8 @@ class Tracking:
                 config={"FRAMEWORK": "verl", **config},
                 logdir=SWANLAB_LOG_DIR,
                 mode=SWANLAB_MODE,
+                resume = SWANLAB_RESUME,
+                id=SWANLAB_ID,                
             )
             self.logger["swanlab"] = swanlab
 

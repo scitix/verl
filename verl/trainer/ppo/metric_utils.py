@@ -14,7 +14,6 @@
 """
 Metrics related to the PPO trainer.
 """
-
 from collections import defaultdict
 from functools import partial
 from typing import Any, Callable
@@ -436,9 +435,12 @@ def process_validation_metrics(
     for data_source, uid2var2vals in data_src2uid2var2vals.items():
         for uid, var2vals in uid2var2vals.items():
             for var_name, var_vals in var2vals.items():
-                if isinstance(var_vals[0], str):
+                # 基于compute_score的score，acc等指标计算，pred中有str，需要continue，但是这里只考虑了score，实际还有advantage等指标
+                # if isinstance(var_vals[0], str):
+                #     continue
+                if var_name != "score":
                     continue
-
+                var_vals = [1 if x > 0 else 0 for x in var_vals]
                 metric = {}
                 n_resps = len(var_vals)
                 metric[f"mean@{n_resps}"] = np.mean(var_vals)

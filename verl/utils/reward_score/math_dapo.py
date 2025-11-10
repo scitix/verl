@@ -121,6 +121,7 @@ REMOVED_EXPRESSIONS = [
 ]
 
 
+
 def normalize_final_answer(final_answer: str) -> str:
     """Normalize a final answer to a quantitative reasoning question.
 
@@ -130,7 +131,10 @@ def normalize_final_answer(final_answer: str) -> str:
     Returns:
         Normalized answer string
     """
-    final_answer = final_answer.split("=")[-1]
+    if isinstance(final_answer, str) and "=" in final_answer:
+        final_answer = final_answer.split("=")[-1]
+    else:
+        final_answer = str(final_answer)
 
     # Apply substitutions and removals
     for before, after in SUBSTITUTIONS:
@@ -180,7 +184,6 @@ def is_correct_minerva(
     match = re.findall(answer_pattern, solution_str)
     extracted_answer = match[-1] if match else "[INVALID]"
     pred = normalize_final_answer(extracted_answer)
-
     # Process ground truth
     if gt_need_extract:
         gt = normalize_final_answer(remove_boxed(last_boxed_only_string(gt)))
@@ -191,7 +194,7 @@ def is_correct_minerva(
 
 
 def is_correct_strict_box(
-    pred: str, gt: str, pause_tokens_index: Optional[list[int]] = None
+    pred: str, gt: str, pause_tokens_index: Optional[list[int]] = None, gt_need_extract: bool = False
 ) -> tuple[int, Optional[str]]:
     """Check if the prediction is correct using strict boxed answer criteria.
 
@@ -209,7 +212,11 @@ def is_correct_strict_box(
         pred = pred[pause_tokens_index[-1] - 100 :]
     else:
         pred = pred[-100:]
-
+        
+    if gt_need_extract:
+        gt = normalize_final_answer(remove_boxed(last_boxed_only_string(gt)))
+    else:
+        gt = normalize_final_answer(gt)
     # Extract and check the boxed answer
     boxed_pred = last_boxed_only_string(pred)
     extracted_pred = remove_boxed(boxed_pred) if boxed_pred is not None else None
@@ -218,7 +225,7 @@ def is_correct_strict_box(
 
 
 def verify(
-    solution_str: str, answer: str, strict_box_verify: bool = False, pause_tokens_index: Optional[list[int]] = None
+    solution_str: str, answer: str, strict_box_verify: bool = True, pause_tokens_index: Optional[list[int]] = None
 ) -> bool:
     """Verify if the solution is correct.
 
@@ -242,7 +249,7 @@ def verify(
 def compute_score(
     solution_str: str,
     ground_truth: str,
-    strict_box_verify: bool = False,
+    strict_box_verify: bool = True,
     pause_tokens_index: Optional[list[int]] = None,
 ) -> float:
     """Compute the reward score for a solution.
@@ -264,9 +271,14 @@ def compute_score(
 
     reward = 1.0 if correct else -1.0
     acc = correct
-
     return {
         "score": reward,
         "acc": acc,
         "pred": pred,
     }
+
+if __name__ == "__main__":
+    solution_str = 'mber of such numbers is \\( \\left\\lfloor \\frac{2024 - 2}{5} \\right\\rfloor + 1 = 405 \\).\n\n3. **Sum the Losing Positions**:\n   - Total losing positions: \\( 404 + 405 = 809 \\).\n\nThus, the number of positive integers \\( n \\) less than or equal to 2024 for which Bob can guarantee a win is \\(\\boxed{809}\\).'
+    ground_truth = 809
+    result = compute_score(solution_str, ground_truth)
+    print(result)
