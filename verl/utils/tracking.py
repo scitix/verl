@@ -402,7 +402,7 @@ class ValidationGenerationsLogger:
         swanlab_table = swanlab.echarts.Table()
 
         # Create column names
-        headers = ["step", "input", "output", "score"]
+        headers = ["step", "input", "output", "score", "ground_truth"]
 
         swanlab_row_list = [[step, *sample] for sample in samples]
         swanlab_table.add(headers=headers, rows=swanlab_row_list)

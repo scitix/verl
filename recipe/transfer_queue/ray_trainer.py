@@ -656,7 +656,7 @@ class RayPPOTrainer:
                 dump_path=rollout_data_dir,
             )
 
-    def _maybe_log_val_generations(self, inputs, outputs, scores):
+    def _maybe_log_val_generations(self, inputs, outputs, scores, gts):
         """Log a table of validation samples to the configured logger (wandb or swanlab)"""
 
         generations_to_log = self.config.trainer.log_val_generations
@@ -667,9 +667,11 @@ class RayPPOTrainer:
         import numpy as np
 
         # Create tuples of (input, output, score) and sort by input text
-        samples = list(zip(inputs, outputs, scores, strict=True))
+        samples = list(zip(inputs, outputs, scores, gts, strict=True))
         samples.sort(key=lambda x: x[0])  # Sort by input text
 
+
+        one_shot = samples[:self.config.actor_rollout_ref.rollout.val_kwargs.n]
         # Use fixed random seed for deterministic shuffling
         rng = np.random.RandomState(42)
         rng.shuffle(samples)
@@ -678,7 +680,8 @@ class RayPPOTrainer:
         samples = samples[:generations_to_log]
 
         # Log to each configured logger
-        self.validation_generations_logger.log(self.config.trainer.logger, samples, self.global_steps)
+        self.validation_generations_logger.log(self.config.trainer.logger, samples+one_shot, self.global_steps)
+        
 
     def _get_gen_batch(self, batch: DataProto) -> DataProto:
         reward_model_keys = set({"data_source", "reward_model", "extra_info", "uid"}) & batch.non_tensor_batch.keys()
@@ -859,7 +862,7 @@ class RayPPOTrainer:
 
             data_source_lst.append(data_source)
 
-        self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores)
+        self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores, gts=sample_gts)
 
         # dump generations
         val_data_dir = self.config.trainer.get("validation_data_dir", None)

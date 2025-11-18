@@ -28,8 +28,7 @@ def init_megatron_optim_config(optim_config: dict) -> OptimizerConfig:
         "min_lr": optim_config.min_lr,
         "clip_grad": optim_config.clip_grad,
         "weight_decay": optim_config.weight_decay,
-        "bf16": True,
-        "params_dtype": torch.bfloat16,
+        "params_dtype": torch.float32,
         "use_distributed_optimizer": True,
     }
 
