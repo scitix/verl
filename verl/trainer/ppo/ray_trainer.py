@@ -439,9 +439,9 @@ class RayPPOTrainer:
             "step": [self.global_steps] * n,
         }
 
-        for k, v in reward_extra_infos_dict.items():
-            if len(v) == n:
-                base_data[k] = v
+        # for k, v in reward_extra_infos_dict.items():
+        #     if len(v) == n:
+        #         base_data[k] = v
 
         lines = []
         for i in range(n):

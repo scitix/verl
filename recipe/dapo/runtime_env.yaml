@@ -2,4 +2,21 @@ working_dir: ./
 excludes: ["/.git/"]
 env_vars:
   TORCH_NCCL_AVOID_RECORD_STREAMS: "1"
+  # If you are using vllm<=0.6.3, you might need to set the following environment variable to avoid bugs:
+  # VLLM_ATTENTION_BACKEND: "XFORMERS"
+  NVTE_FUSED_ATTN: "0"
+  NVTE_DEBUG: "0"
+  NVTE_DEBUG_LEVEL: "0"
+  GLOO_SOCKET_IFNAME: "eth0"
+  SGLANG_DISABLE_CUDA_GRAPH: "1"
+  NCCL_IB_DISABLE: "1"
+  NCCL_NVLS_ENABLE: "0"
+  NCCL_P2P_DISABLE: "1"
+  NCCL_BLOCKING_WAIT: "1"     # 启用阻塞等待模式，防止早退
+  NCCL_TIMEOUT_MS: "20000000"
+  SWANLAB_LOG_DIR: /volume/data/tldu/new/ai4s-job-system/verl_trainer/swanlab
+  SWANLAB_MODE: cloud
+  SWANLAB_API_KEY: F7MbRbLGBLKfgJ4uj5DoN
+  SWANLAB_RESUME: "True"
   VLLM_USE_V1: "1"
+  # LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/:${LD_LIBRARY_PATH}"

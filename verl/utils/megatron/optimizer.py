@@ -38,7 +38,6 @@ def init_megatron_optim_config(optim_config: dict, fp16: bool = False) -> Optimi
                 "params_dtype": torch.float16,
                 "initial_loss_scale": 32768,
                 "min_loss_scale": 1,
-                "use_precision_aware_optimizer": True,
                 "store_param_remainders": False,
             }
         )
