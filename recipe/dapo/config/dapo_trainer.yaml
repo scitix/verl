@@ -11,6 +11,9 @@ data:
 
 reward_model:
   reward_manager: dapo
+  format_reward_cfg:
+    enable: False # We try to avoid forgetting to set enable
+    
   overlong_buffer: 
     enable: False # We try to avoid forgetting to set enable
     len: 0

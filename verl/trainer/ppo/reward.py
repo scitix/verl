@@ -146,7 +146,6 @@ def load_reward_manager(
     # By default reward_manager is set to naive (NaiveRewardManager)
     reward_manager_name = config.reward_model.get("reward_manager", "naive")
     reward_manager_cls = get_reward_manager_cls(reward_manager_name)
-
     if compute_score is None:
         sandbox_config = config.reward_model.get("sandbox_fusion")
         sandbox_url = sandbox_config.get("url") if sandbox_config else None
@@ -197,6 +196,7 @@ def compute_reward(data: DataProto, reward_fn: AbstractRewardManager) -> tuple[t
         Tuple of reward tensor and extra info dictionary.
     """
     try:
+        data.batch.pop("rm_scores", None)
         reward_result = reward_fn(data, return_dict=True)
         reward_tensor = reward_result["reward_tensor"]
         reward_extra_infos_dict = reward_result.get("reward_extra_info", {})

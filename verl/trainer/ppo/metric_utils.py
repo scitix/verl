@@ -122,7 +122,8 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
 
     non_aborted_sequence_score = sequence_score[non_aborted_mask]
     non_aborted_sequence_reward = sequence_reward[non_aborted_mask]
-
+    format_reward = batch.non_tensor_batch["format_reward"] if "format_reward" in batch.non_tensor_batch else None
+    overlong_reward = batch.non_tensor_batch["overlong_reward"] if "overlong_reward" in batch.non_tensor_batch else None
     score_mean = torch.mean(non_aborted_sequence_score).detach().item()
     score_max = torch.max(non_aborted_sequence_score).detach().item()
     score_min = torch.min(non_aborted_sequence_score).detach().item()
@@ -154,7 +155,6 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         )
     else:
         raise ValueError("All samples are aborted, this should not happen.")
-
     metrics = {
         # score
         "critic/score/mean": score_mean,
@@ -164,6 +164,8 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         "critic/rewards/mean": reward_mean,
         "critic/rewards/max": reward_max,
         "critic/rewards/min": reward_min,
+        "critic/format_reward/mean": (torch.mean(torch.tensor(format_reward)).detach().item()) if format_reward is not None else 0.0,
+        "critic/overlong_reward/mean": (torch.mean(torch.tensor(overlong_reward)).detach().item()) if overlong_reward is not None else 0.0,
         # adv
         "critic/advantages/mean": torch.mean(valid_adv).detach().item(),
         "critic/advantages/max": torch.max(valid_adv).detach().item(),
@@ -188,9 +190,7 @@ def compute_data_metrics(batch: DataProto, use_critic: bool = True) -> dict[str,
         "response_length/mean": torch.mean(response_length).detach().item(),
         "response_length/max": torch.max(response_length).detach().item(),
         "response_length/min": torch.min(response_length).detach().item(),
-        "response_length/clip_ratio": torch.mean(torch.eq(response_length, max_response_length).float())
-        .detach()
-        .item(),
+        "response_length/clip_ratio": torch.mean(torch.eq(response_length, max_response_length).float()).detach().item(),
         # response length (non-aborted only)
         # These statistics exclude aborted samples to avoid skew from zeros
         "response_length_non_aborted/mean": non_aborted_response_length_mean,

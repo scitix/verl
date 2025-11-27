@@ -3,10 +3,10 @@ set -xeuo pipefail
 
 
 rollout_name="vllm" # sglang or vllm
-dtype="float16" # ["bfloat16", "float16"]
+dtype="bfloat16" # ["bfloat16", "float16"]
 
 project_name='FP16'
-experiment_name='DAPO-Qwen3-4B-Base-megatron-fp16'
+experiment_name='DAPO-Qwen3-4B-SFT-megatron-bf16'
 
 adv_estimator=grpo
 
@@ -26,9 +26,9 @@ overlong_penalty_factor=1.0
 
 loss_agg_mode="token-mean"
 
-train_prompt_bsz=128
-n_resp_per_prompt=16
-train_prompt_mini_bsz=64
+train_prompt_bsz=16
+n_resp_per_prompt=8
+train_prompt_mini_bsz=16
 
 # data
 gsm8k_train_path=/volume/data/tldu/ai4s-job-system/data/gsm8k/train.parquet
@@ -38,20 +38,21 @@ curr_train_path=/volume/data/tldu/ai4s-job-system/data/curriculum/deepscaler_ske
 math_test_path=/volume/data/tldu/ai4s-job-system/data/math/test.parquet
 dapo_train_path=/volume/data/tldu/ai4s-job-system/data/dapo_17k/dapo_math_train.parquet
 dapo_test_path=/volume/data/tldu/ai4s-job-system/data/dapo_17k/dapo_math_train_head5000.parquet
+dapo_17k_processed_path=/volume/data/tldu/ai4s-job-system/data/dapo_17k/train.parquet
 aime2024_test_path=/volume/data/tldu/ai4s-job-system/data/AIME_2024/test.parquet
 aime2025_test_path=/volume/data/tldu/ai4s-job-system/data/AIME_2025/test.parquet
-TRAIN_FILE="['$dapo_train_path']"
+TRAIN_FILE="['$dapo_17k_processed_path']"
 TEST_FILE="['$aime2024_test_path', '$aime2025_test_path']"
 
 # Ray
 RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
 WORKING_DIR=${WORKING_DIR:-"${PWD}"}
 RUNTIME_ENV=${RUNTIME_ENV:-"recipe/dapo/runtime_env.yaml"}
-NNODES=${NNODES:-8}
+NNODES=${NNODES:-1}
 # Paths
 
 RAY_DATA_HOME=/volume/data/tldu/ai4s-job-system/checkpoints/RL
-MODEL_PATH=/volume/data/models/qwen3/Qwen3-4B-Base
+MODEL_PATH=/volume/data/tldu/ai4s-job-system/checkpoints/merge_models/openr1-qwen4B-sft
 CKPTS_DIR=${CKPTS_DIR:-"${RAY_DATA_HOME}/ckpts/${project_name}/${experiment_name}"}
 
 
@@ -152,16 +153,20 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.rollout.val_kwargs.top_k=${top_k} \
     actor_rollout_ref.actor.megatron.use_mbridge=True \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
-    actor_rollout_ref.rollout.val_kwargs.n=32 \
+    actor_rollout_ref.rollout.val_kwargs.n=8 \
     actor_rollout_ref.rollout.calculate_log_probs=True \
     +actor_rollout_ref.actor.megatron.override_transformer_config.apply_rope_fusion=True \
     reward_model.reward_manager=dapo \
+    reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
+    reward_model.overlong_buffer.len=${overlong_buffer_len} \
+    reward_model.overlong_buffer.penalty_factor=${overlong_penalty_factor} \
+    reward_model.format_reward_cfg.enable=True \
     trainer.logger=['console','swanlab'] \
     trainer.project_name="${project_name}" \
     trainer.experiment_name="${experiment_name}" \
     trainer.n_gpus_per_node=8 \
     trainer.nnodes="${NNODES}" \
-    trainer.val_before_train=False \
+    trainer.val_before_train=True \
     trainer.test_freq=10 \
     trainer.save_freq=40 \
     trainer.total_epochs=10 \

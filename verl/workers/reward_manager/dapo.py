@@ -15,7 +15,7 @@
 from collections import defaultdict
 
 import torch
-
+import re
 from verl import DataProto
 from verl.utils.reward_score import default_compute_score
 from verl.workers.reward_manager import register
@@ -34,15 +34,16 @@ class DAPORewardManager(AbstractRewardManager):
         reward_fn_key="data_source",
         max_resp_len=None,
         overlong_buffer_cfg=None,
+        format_reward_cfg=None,
         **kwargs,
     ) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.compute_score = compute_score or default_compute_score
         self.reward_fn_key = reward_fn_key
+        self.format_reward_cfg = format_reward_cfg
         self.overlong_buffer_cfg = overlong_buffer_cfg
         self.max_resp_len = max_resp_len
-
         if self.overlong_buffer_cfg is not None:
             assert self.max_resp_len is not None, (
                 f"max_resp_len must be provided if {overlong_buffer_cfg=}, but got None"
@@ -53,7 +54,6 @@ class DAPORewardManager(AbstractRewardManager):
 
     def __call__(self, data: DataProto, return_dict: bool = False):
         """We will expand this function gradually based on the available datasets"""
-
         # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
         if "rm_scores" in data.batch.keys():
             if return_dict:
@@ -67,7 +67,6 @@ class DAPORewardManager(AbstractRewardManager):
         reward_extra_info = defaultdict(list)
 
         already_print_data_sources = {}
-
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
@@ -85,6 +84,7 @@ class DAPORewardManager(AbstractRewardManager):
             # decode
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+            breakpoint()
             eos_token = self.tokenizer.eos_token
             if response_str.endswith(eos_token):
                 response_str = response_str[: -len(eos_token)]
@@ -117,7 +117,31 @@ class DAPORewardManager(AbstractRewardManager):
                 reward_extra_info["acc"].append(score)
 
             reward = score
+            # format reward
+            if (
+                self.format_reward_cfg 
+                and hasattr(self.format_reward_cfg, 'enable') 
+                and self.format_reward_cfg.enable
+            ):
+                format_reward = 0.0
 
+                # 找出所有成对的 <think></think>
+                matches = re.findall(r"<think>(.*?)</think>", response_str, re.DOTALL)
+                count = len(matches)
+
+                if count == 1:
+                    content = matches[0].strip()
+                    if content:
+                        format_reward = 0.5
+                    else:
+                        format_reward = 0.0
+                elif count == 0:
+                    format_reward = -0.5
+                else:
+                    format_reward = 0.0
+
+                reward_extra_info["format_reward"].append(format_reward)
+                reward += format_reward
             if self.overlong_buffer_cfg.enable:
                 overlong_buffer_len = self.overlong_buffer_cfg.len
                 expected_len = self.max_resp_len - overlong_buffer_len
@@ -128,9 +152,7 @@ class DAPORewardManager(AbstractRewardManager):
                 if self.overlong_buffer_cfg.log:
                     reward_extra_info["overlong_reward"].append(overlong_reward)
                     reward_extra_info["overlong"].append(overlong_reward < 0)
-
             reward_tensor[i, valid_response_length - 1] = reward
-
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
 
@@ -144,7 +166,6 @@ class DAPORewardManager(AbstractRewardManager):
                         print(f"[{key}]", value)
                 else:
                     print("[score]", score)
-
         if return_dict:
             return {
                 "reward_tensor": reward_tensor,

@@ -860,7 +860,6 @@ class RayPPOTrainer:
                 data_source = data["data_source"]
 
             data_source_lst.append(data_source)
-
         self._maybe_log_val_generations(inputs=sample_inputs, outputs=sample_outputs, scores=sample_scores, gts=sample_gts)
 
         # dump generations
