@@ -6,7 +6,7 @@ rollout_name="vllm" # sglang or vllm
 dtype="bfloat16" # ["bfloat16", "float16"]
 
 project_name='FP16'
-experiment_name='DAPO-Qwen3-4B-megatron-bf16'
+experiment_name='DAPO-Qwen3-4B-megatron-bf16-gatereward'
 
 adv_estimator=grpo
 
@@ -26,9 +26,9 @@ overlong_penalty_factor=1.0
 
 loss_agg_mode="token-mean"
 
-train_prompt_bsz=8
-n_resp_per_prompt=8
-train_prompt_mini_bsz=8
+train_prompt_bsz=128
+n_resp_per_prompt=16
+train_prompt_mini_bsz=64
 
 # data
 gsm8k_train_path=/volume/data/tldu/ai4s-job-system/data/gsm8k/train.parquet
@@ -48,11 +48,11 @@ TEST_FILE="['$aime2024_test_path', '$aime2025_test_path']"
 RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
 WORKING_DIR=${WORKING_DIR:-"${PWD}"}
 RUNTIME_ENV=${RUNTIME_ENV:-"recipe/dapo/runtime_env.yaml"}
-NNODES=${NNODES:-1}
+NNODES=${NNODES:-8}
 # Paths
 
 RAY_DATA_HOME=/volume/data/tldu/ai4s-job-system/checkpoints/RL
-MODEL_PATH=/volume/data/tldu/ai4s-job-system/checkpoints/merge_models/openr1-qwen4B-sft-5k
+MODEL_PATH=/volume/data/tldu/ai4s-job-system/checkpoints/merge_models/openr1-qwen4B-sft-5k-base
 CKPTS_DIR=${CKPTS_DIR:-"${RAY_DATA_HOME}/ckpts/${project_name}/${experiment_name}"}
 
 
@@ -94,6 +94,7 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     data.train_files="${TRAIN_FILE}" \
     data.val_files="${TEST_FILE}" \
     data.prompt_key=prompt \
+    data.filter_overlong_prompts=True \
     data.truncation='left' \
     data.seed=42 \
     actor_rollout_ref.rollout.name=${rollout_name} \
@@ -102,6 +103,7 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
+    data.dataloader_num_workers=8 \
     actor_rollout_ref.rollout.n=${n_resp_per_prompt} \
     algorithm.filter_groups.enable=${enable_filter_groups} \
     algorithm.filter_groups.max_num_gen_batches=${max_num_gen_batches} \

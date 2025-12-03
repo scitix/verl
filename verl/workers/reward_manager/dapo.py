@@ -84,7 +84,6 @@ class DAPORewardManager(AbstractRewardManager):
             # decode
             prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
             response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
-            breakpoint()
             eos_token = self.tokenizer.eos_token
             if response_str.endswith(eos_token):
                 response_str = response_str[: -len(eos_token)]
@@ -116,32 +115,26 @@ class DAPORewardManager(AbstractRewardManager):
                 score = result
                 reward_extra_info["acc"].append(score)
 
-            reward = score
-            # format reward
+            reward = score  
+
             if (
                 self.format_reward_cfg 
                 and hasattr(self.format_reward_cfg, 'enable') 
                 and self.format_reward_cfg.enable
             ):
-                format_reward = 0.0
+                open_count = len(re.findall(r"<think>", response_str))
+                close_count = len(re.findall(r"</think>", response_str))
 
-                # 找出所有成对的 <think></think>
-                matches = re.findall(r"<think>(.*?)</think>", response_str, re.DOTALL)
-                count = len(matches)
-
-                if count == 1:
-                    content = matches[0].strip()
-                    if content:
-                        format_reward = 0.5
-                    else:
-                        format_reward = 0.0
-                elif count == 0:
-                    format_reward = -0.5
+                if open_count == 1 and close_count == 1:
+                    matches = re.findall(r"<think>(.*?)</think>", response_str, re.DOTALL)
+                    format_gate = 1.0 if len(matches) == 1 and matches[0].strip() != "" else 0.0
                 else:
-                    format_reward = 0.0
+                    format_gate = -1.0
 
-                reward_extra_info["format_reward"].append(format_reward)
-                reward += format_reward
+                reward_extra_info["format_reward"].append(format_gate)
+                reward = reward + format_gate
+
+
             if self.overlong_buffer_cfg.enable:
                 overlong_buffer_len = self.overlong_buffer_cfg.len
                 expected_len = self.max_resp_len - overlong_buffer_len
