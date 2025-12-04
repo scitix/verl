@@ -6,7 +6,7 @@ rollout_name="vllm" # sglang or vllm
 dtype="bfloat16" # ["bfloat16", "float16"]
 
 project_name='FP16'
-experiment_name='DAPO-Qwen3-4B-megatron-bf16-gatereward1'
+experiment_name='DAPO-Qwen3-4B-base-megatron-bf16-gatereward1'
 
 adv_estimator=grpo
 
@@ -27,8 +27,8 @@ overlong_penalty_factor=1.0
 loss_agg_mode="token-mean"
 
 train_prompt_bsz=16
-n_resp_per_prompt=4
-train_prompt_mini_bsz=16
+n_resp_per_prompt=16
+train_prompt_mini_bsz=8
 
 # data
 gsm8k_train_path=/volume/data/tldu/ai4s-job-system/data/gsm8k/train.parquet
@@ -48,11 +48,11 @@ TEST_FILE="['$aime2024_test_path', '$aime2025_test_path']"
 RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
 WORKING_DIR=${WORKING_DIR:-"${PWD}"}
 RUNTIME_ENV=${RUNTIME_ENV:-"recipe/dapo/runtime_env.yaml"}
-NNODES=${NNODES:-1}
+NNODES=${NNODES:-8}
 # Paths
 
 RAY_DATA_HOME=/volume/data/tldu/ai4s-job-system/checkpoints/RL
-MODEL_PATH=/volume/data/tldu/ai4s-job-system/checkpoints/merge_models/Qwen3-4B-to-mcore/hf_iter_0001500
+MODEL_PATH=/volume/data/tldu/ai4s-job-system/checkpoints/merge_models/Qwen3-4B-Base
 CKPTS_DIR=${CKPTS_DIR:-"${RAY_DATA_HOME}/ckpts/${project_name}/${experiment_name}"}
 
 
