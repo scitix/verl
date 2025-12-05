@@ -73,12 +73,13 @@ class Profiler:
                 record_shapes=True,
                 with_stack=True,
             )
+        else:
+            self.enable = False
+            print(f"[Profiler] Profiler not enabled for rank {self.rank}")
 
     def _validate(self):
         if self.enable:
-            if self.config.profile_ranks is None:
-                print("[WARNING] Profile ranks is not set, default to rank 0")
-                self.config.profile_ranks = [0]
+            self.config.profile_ranks = self.config.ranks
             assert self.tool_config.step_start >= 0, "[ERROR] Profile step start must be greater than 0"
             assert self.tool_config.step_end >= 0, "[ERROR] Profile step end must be greater than 0"
             assert self.tool_config.step_start < self.tool_config.step_end, (
@@ -88,7 +89,13 @@ class Profiler:
     def check(self):
         return self.prof is not None and self.enable
 
-    def start(self):
+    def start(self, **kwargs):
+        # If include "role" in kwargs, and it is "e2e", don't start
+        # This addresses the problem that creating nested profiling in the same process.
+        if "role" in kwargs and kwargs["role"] == "e2e":
+            self.enable = False
+            print(f"[Profiler] avoid nested profiling, skipping")
+            return
         if self.check():
             print(f"[Profiler] started for rank {self.rank}")
             self.prof.start()
@@ -100,13 +107,14 @@ class Profiler:
     def stop(self):
         if self.check():
             print(f"[Profiler] stopped for rank {self.rank}")
+            self.enable = False
             self.prof.stop()
 
     def save(self):
         if self.prof is not None and not self.saved:
             if not os.path.exists(self.config.save_path):
                 os.makedirs(self.config.save_path)
-            save_file_name = f"/prof_start_{self.config.step_start}_end_{self.config.step_end}_rank_{self.rank}.json"
+            save_file_name = f"/prof_start_{self.tool_config.step_start}_end_{self.tool_config.step_end}_rank_{self.rank}.json"
             print(f"[Profiler] Saving trace to {self.config.save_path + save_file_name}")
             self.prof.export_chrome_trace(self.config.save_path + save_file_name)
             self.enable = False
