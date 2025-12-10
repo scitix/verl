@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
-
+pwd=/volume/data/tldu/new/ai4s-job-system/submodules/verl/
 
 rollout_name="vllm" # sglang or vllm
 train_dtype="bfloat16" # ["bfloat16", "float16"]
@@ -20,16 +20,16 @@ clip_ratio_low=0.2
 clip_ratio_high=0.28
 
 max_prompt_length=$((1024 * 2))
-max_response_length=$((1024 * 16))
+max_response_length=$((1024 * 12))
 enable_overlong_buffer=True
-overlong_buffer_len=$((1024 * 14))
+overlong_buffer_len=$((1024 * 10))
 overlong_penalty_factor=1.0
 
 loss_agg_mode="token-mean"
 
 train_prompt_bsz=16
 n_resp_per_prompt=4
-train_prompt_mini_bsz=8
+train_prompt_mini_bsz=16
 
 # data
 gsm8k_train_path=/volume/data/tldu/ai4s-job-system/data/gsm8k/train.parquet
@@ -49,7 +49,7 @@ TEST_FILE="['$aime2024_test_path', '$aime2025_test_path']"
 RAY_ADDRESS=${RAY_ADDRESS:-"http://localhost:8265"}
 WORKING_DIR=${WORKING_DIR:-"${PWD}"}
 RUNTIME_ENV=${RUNTIME_ENV:-"recipe/dapo/runtime_env.yaml"}
-NNODES=${NNODES:-1}
+NNODES=${NNODES:-2}
 # Paths
 
 RAY_DATA_HOME=/volume/data/tldu/ai4s-job-system/checkpoints/RL
@@ -83,14 +83,21 @@ use_dynamic_bsz=True
 actor_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 1))
 infer_ppo_max_token_len=$(((max_prompt_length + max_response_length) * 1))
 offload=True
-gen_tp=2
-train_tp=2
-train_pp=1
-sp_size=2
-EP=${EP:-4}
+
+train_tp=1
+train_pp=2
+EP=8
 ETP=1
 CP=1
+
+# vLLM (rollout) parallel configuration
+ROLLOUT_TP=8
+ROLLOUT_PP=1
+ROLLOUT_DP=1
+ROLLOUT_EP=8
 # TODO: support dynamic_bsz for megatron
+LOG_DIR=${PWD}/log
+mkdir -p $LOG_DIR
 
 ray job submit --runtime-env="${RUNTIME_ENV}" \
     -- python3 -m recipe.dapo.main_dapo \
@@ -119,27 +126,12 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     algorithm.kl_ctrl.kl_coef=${kl_coef} \
     algorithm.rollout_correction.rollout_is=${rollout_is} \
     algorithm.rollout_correction.rollout_is_threshold=${rollout_is_threshold} \
-    algorithm.filter_groups.max_num_gen_batches=10 \
     actor_rollout_ref.ref.megatron.pipeline_model_parallel_size=${train_pp} \
     actor_rollout_ref.ref.megatron.tensor_model_parallel_size=${train_tp} \
-    actor_rollout_ref.ref.megatron.expert_model_parallel_size=$EP \
-    actor_rollout_ref.ref.megatron.expert_tensor_parallel_size=$ETP \
+    actor_rollout_ref.ref.megatron.expert_model_parallel_size=${EP} \
+    actor_rollout_ref.ref.megatron.expert_tensor_parallel_size=${ETP} \
     actor_rollout_ref.ref.megatron.context_parallel_size=${CP} \
     actor_rollout_ref.ref.megatron.param_offload=${offload} \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.apply_rope_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.masked_softmax_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.bias_activation_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.bias_dropout_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.gradient_accumulation_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.deallocate_pipeline_outputs=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.persist_layer_norm=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_grouped_gemm=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_permute_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_token_dispatcher_type="flex" \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_router_dtype=fp32 \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_enable_deepep=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.account_for_loss_in_pipeline_split=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.account_for_embedding_in_pipeline_split=True \
     actor_rollout_ref.model.use_fused_kernels=True \
     actor_rollout_ref.actor.use_kl_loss=${use_kl_loss} \
     actor_rollout_ref.actor.kl_loss_coef=${kl_loss_coef} \
@@ -147,8 +139,8 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.actor.clip_ratio_high=${clip_ratio_high} \
     actor_rollout_ref.actor.clip_ratio_c=10.0 \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=2 \
-    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=4 \
-    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=4 \
+    actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=2 \
+    actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=2 \
     actor_rollout_ref.actor.use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.ref.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
     actor_rollout_ref.rollout.log_prob_use_dynamic_bsz=${use_dynamic_bsz} \
@@ -165,11 +157,15 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.actor.megatron.grad_offload=${offload} \
     actor_rollout_ref.actor.megatron.pipeline_model_parallel_size=${train_pp} \
     actor_rollout_ref.actor.megatron.tensor_model_parallel_size=${train_tp} \
+    actor_rollout_ref.actor.megatron.expert_model_parallel_size=${EP} \
     actor_rollout_ref.actor.entropy_coeff=0 \
     actor_rollout_ref.actor.optim.clip_grad=1.0 \
     actor_rollout_ref.actor.loss_agg_mode=${loss_agg_mode} \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.80 \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=${gen_tp} \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=${ROLLOUT_TP} \
+    actor_rollout_ref.rollout.pipeline_model_parallel_size=${ROLLOUT_PP} \
+    actor_rollout_ref.rollout.data_parallel_size=${ROLLOUT_DP} \
+    actor_rollout_ref.rollout.expert_parallel_size=${ROLLOUT_EP} \
     actor_rollout_ref.rollout.enable_chunked_prefill=True \
     actor_rollout_ref.rollout.max_num_batched_tokens=$((max_prompt_length + max_response_length)) \
     actor_rollout_ref.rollout.temperature=${temperature} \
@@ -183,8 +179,21 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
     actor_rollout_ref.rollout.val_kwargs.n=32 \
     actor_rollout_ref.rollout.calculate_log_probs=True \
-    actor_rollout_ref.actor.router_replay.mode="R3" \
-    actor_rollout_ref.rollout.enable_rollout_routing_replay=True \
+    actor_rollout_ref.actor.router_replay.mode="R2" \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.apply_rope_fusion=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.masked_softmax_fusion=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.bias_activation_fusion=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.bias_dropout_fusion=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.gradient_accumulation_fusion=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.deallocate_pipeline_outputs=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.persist_layer_norm=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_grouped_gemm=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_permute_fusion=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_token_dispatcher_type="flex" \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_router_dtype=fp32 \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_enable_deepep=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.account_for_loss_in_pipeline_split=True \
+    +actor_rollout_ref.actor.megatron.override_transformer_config.account_for_embedding_in_pipeline_split=True \
     reward_model.reward_manager=dapo \
     reward_model.overlong_buffer.enable=${enable_overlong_buffer} \
     reward_model.overlong_buffer.len=${overlong_buffer_len} \
@@ -204,7 +213,18 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     trainer.rollout_data_dir=/volume/data/tldu/ai4s-job-system/checkpoints/RL/data/$experiment_name \
     trainer.resume_mode=auto \
     trainer.log_val_generations=10 \
-    $@
+    2>&1 | tee ${PWD}/log/${experiment_name}_$(date +'%Y%m%d_%H%M%S').log
 
+    # actor_rollout_ref.actor.router_replay.mode="R3" \
+    # actor_rollout_ref.rollout.enable_rollout_routing_replay=True \
 
+    # chengke config
+    # +actor_rollout_ref.actor.megatron.override_ddp_config.overlap_grad_reduce=True \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.gradient_accumulation_fusion=True \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.apply_rope_fusion=True \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.moe_router_dtype=fp32 \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.moe_shared_expert_overlap=False \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.moe_permute_fusion=True \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.moe_enable_deepep=True \
+    # +actor_rollout_ref.actor.megatron.override_transformer_config.moe_token_dispatcher_type=flex \
 # raysubmit_xkqG61FGV5bMKmAB
