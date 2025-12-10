@@ -297,12 +297,15 @@ class AgentLoopWorkerBase:
                 self.processor.chat_template = self.config.actor_rollout_ref.model.custom_chat_template
             self.tokenizer.chat_template = self.config.actor_rollout_ref.model.custom_chat_template
 
-        self.reward_manager_worker = RewardLoopWorker.options(
-            scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
-                node_id=ray.get_runtime_context().get_node_id(),
-                soft=False,
-            ),
-        ).remote(self.config, self.reward_router_address)
+        use_reward_loop = True if self.config.reward_model.use_reward_loop else None
+        self.use_reward_loop = use_reward_loop
+        if use_reward_loop and not hasattr(self, "reward_manager_worker"):
+            self.reward_loop_worker = RewardLoopWorker.options(
+                scheduling_strategy=ray.util.scheduling_strategies.NodeAffinitySchedulingStrategy(
+                    node_id=ray.get_runtime_context().get_node_id(),
+                    soft=False,
+                ),
+            ).remote(self.config, self.reward_router_address)
 
         trace_config = self.config.actor_rollout_ref.rollout.get("trace", {})
         RolloutTraceConfig.init(
@@ -431,7 +434,8 @@ class AgentLoopWorkerBase:
 
         # Some AgentLoop may have already computed the reward score, e.g SWE-agent.
 
-        # NOTE: consistent with batch version of generate_sequences in vllm_rollout_spmd.py
+        # NOTE: consistent with the legacy batch version of generate_sequences that existed in the
+        # deprecated vLLM SPMD rollout implementation.
         # prompt_ids: left padded with zeros (e.g., [0,0,0,0,1,2,3,4])
         # response_ids: right padded with zeros (e.g., [5,6,7,8,0,0,0,0])
         # input_ids: concatenation of prompt + response
@@ -550,7 +554,7 @@ class AgentLoopWorkerBase:
         enable_async_reward = (
             self.reward_router_address is not None and self.config.reward_model.enable_resource_pool
         ) or not self.config.reward_model.enable
-        if output.reward_score is None and enable_async_reward:
+        if output.reward_score is None and enable_async_reward and self.use_reward_loop:
             batch = TensorDict(
                 {
                     "prompts": prompt_output["input_ids"],  # [1, prompt_length]
@@ -571,7 +575,7 @@ class AgentLoopWorkerBase:
                 batch=batch,
                 non_tensor_batch=non_tensor_batch,
             )
-            result = await self.reward_manager_worker.compute_score.remote(data)
+            result = await self.reward_loop_worker.compute_score.remote(data)
             output.reward_score = result["reward_score"]
             output.extra_fields["reward_extra_info"] = result["reward_extra_info"]
 
