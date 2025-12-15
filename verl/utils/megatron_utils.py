@@ -134,6 +134,7 @@ def get_model(
     if config.fp16 or config.bf16:  # the ModelParallelConfig in GPTModel
         model = [Float16Module(config, model_module) for model_module in model]
 
+    print(f"{wrap_with_ddp=}")
     if wrap_with_ddp:
         ddp_models = []
         ddp_config_dict = {
@@ -143,6 +144,7 @@ def get_model(
         }
         if override_ddp_config is not None:
             ddp_config_dict.update(override_ddp_config)
+        print(f"{ddp_config_dict=}")
         ddp_config = DistributedDataParallelConfig(**ddp_config_dict)
         for model_chunk_idx, model_chunk in enumerate(model):
             ddp_model = DDP(

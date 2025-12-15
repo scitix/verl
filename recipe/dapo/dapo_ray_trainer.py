@@ -154,7 +154,21 @@ class RayDAPOTrainer(RayPPOTrainer):
                 with marked_timer("step", timing_raw):
                     # generate a batch
                     with marked_timer("gen", timing_raw, "red"):
-                        gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch_output)
+                        # To speedup the test of the training process, we use a replay of the generated batch.
+                        # If a specified file exists, load the batch from the file.
+                        cache_file = "/mnt/hisys-data/chengke/ai4s-job-system/verl_trainer/demo/deepseek_runpass/replay_gen_batch.pkl"
+                        import pickle
+                        if os.path.exists(cache_file):
+                            print(f"Loading cached batch from {cache_file}")
+                            with open(cache_file, "rb") as f:
+                                gen_batch_output_loaded = pickle.load(f)
+                            assert gen_batch_output_loaded.batch.batch_size == gen_batch_output.batch.batch_size, f"{gen_batch_output_loaded.batch=}, {gen_batch_output.batch=}"
+                            gen_batch_output = gen_batch_output_loaded
+                        else:
+                            gen_batch_output = self.async_rollout_manager.generate_sequences(gen_batch_output)
+                            print(f"Generated batch and saved to {cache_file}, {gen_batch_output.batch=}, {type(gen_batch_output.batch)=}")
+                            with open(cache_file, "wb") as f:
+                                pickle.dump(gen_batch_output, f)
                         timing_raw.update(gen_batch_output.meta_info["timing"])
                         gen_batch_output.meta_info.pop("timing", None)
 
@@ -223,6 +237,8 @@ class RayDAPOTrainer(RayPPOTrainer):
                             )  # TODO: This will be cleared if we use multiple genenration batches
                         else:
                             new_batch.batch["token_level_rewards"] = new_batch.batch["token_level_scores"]
+
+                    print(f"{new_batch.batch=}")
 
                     if not self.config.algorithm.filter_groups.enable:
                         batch = new_batch

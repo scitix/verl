@@ -317,6 +317,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
         self.generation_config = get_generation_config(self.local_path)
 
         if self._is_actor or self._is_rollout:
+            print(f'{self.bridge=}')
             wrap_config = McoreModuleWrapperConfig(
                 is_value_model=False,  # actor is not value model
                 share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
@@ -575,6 +576,8 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
 
     async def rollout_mode(self):
         """Context switch hybridengine to rollout mode."""
+
+        print(f"==== Let's rollout ===")
         aggressive_empty_cache(force_sync=True)
 
         if self._is_offload_param:
@@ -609,6 +612,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
 
     async def trainer_mode(self):
         """Context switch hybridengine to trainer mode."""
+        print(f"==== Let's train ===")
         if self.config.rollout.free_cache_engine:
             log_gpu_memory_usage("Before rollout offload", logger=logger)
             await self.rollout.release()
@@ -641,6 +645,7 @@ class ActorRolloutRefWorker(MegatronWorker, DistProfilerExtension):
             load_megatron_optimizer(self.actor_optimizer)
             log_gpu_memory_usage("After load actor optimizer during update_actor", logger=logger)
 
+        print(f"update_actor: {data.batch.batch_size=}")
         micro_batch_size = self.config.actor.ppo_micro_batch_size_per_gpu
         data.meta_info["micro_batch_size"] = micro_batch_size
         dataloader = self.actor.make_minibatch_iterator(data=data)

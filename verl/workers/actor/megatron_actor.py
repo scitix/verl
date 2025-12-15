@@ -617,6 +617,11 @@ class MegatronPPOActor(BasePPOActor):
         # batch should be a list of batches inside micro-batches
         batch_generator = make_batch_generator(micro_batches, vpp_size=len(self.actor_module))
 
+        # print(f"{micro_batches=}") # micro_batches=[TensorDict(
+        #   attention_mask: Tensor(shape=torch.Size([2 or 3, 14336]), device=cpu, dtype=torch.bool, is_shared=False)
+        #   n_micro_batch=47, total_seqlen=14336
+        print(f"{use_dynamic_bsz=}, {n_micro_batch=}, {total_seqlen=}")
+
         # TODO: we may use the new schedule instead
         # for flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
         if mpu.get_pipeline_model_parallel_world_size() > 1:
@@ -667,7 +672,13 @@ class MegatronPPOActor(BasePPOActor):
         metrics = {}
         if self.use_torch_profiler and self.prof and self.prof.enable:
             self.prof.start()
+
+        print(f"=== update_policy ===")
+        import time
+        start_time = time.time()
         for data in dataloader:
+            print(f"Data size: {len(data)}, {data.batch=}")
+            
             self.actor_optimizer.zero_grad()
             # use use_contiguous_buffers_in_local_ddp and no overlap_dp_param_comm
             for chunk in self.actor_module:
@@ -706,6 +717,10 @@ class MegatronPPOActor(BasePPOActor):
                 raise NotImplementedError
             if self.use_torch_profiler and self.prof and self.prof.enable:
                 self.prof.step()
+            
+            end_time = time.time()
+            print(f"Time taken: {end_time - start_time}")
+            start_time = end_time
         # add empty cache after each compute
         if self.use_torch_profiler and self.prof and self.prof.enable:
             self.prof.stop_and_save()

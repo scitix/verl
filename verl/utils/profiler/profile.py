@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import functools
+import inspect
 import os
 from typing import Callable, Optional
 
@@ -98,6 +99,28 @@ class Profiler:
             return
         if self.check():
             print(f"[Profiler] started for rank {self.rank}")
+            # Use signature inspection to only pass supported parameters
+            # This ensures compatibility across different PyTorch versions
+            try:
+                f = torch.cuda.memory._record_memory_history
+                params = set(inspect.signature(f).parameters.keys())
+                memory_kwargs = {
+                    "enabled": "all",
+                }
+                max_entries = 20000000
+                if "max_entries" in params:
+                    memory_kwargs["max_entries"] = max_entries
+                elif "trace_alloc_max_entries" in params:
+                    memory_kwargs["trace_alloc_max_entries"] = max_entries
+                if "stack_depth" in params:
+                    memory_kwargs["stack_depth"] = 32
+                if "record_context" in params:
+                    memory_kwargs["record_context"] = True
+                # Note: trace_alloc_record_context is not a valid parameter
+                f(**memory_kwargs)
+            except Exception as e:
+                # Silently ignore if memory history recording is not supported
+                print(f"[Profiler] Warning: Could not enable memory history recording: {e}")
             self.prof.start()
 
     def step(self):
@@ -114,9 +137,15 @@ class Profiler:
         if self.prof is not None and not self.saved:
             if not os.path.exists(self.config.save_path):
                 os.makedirs(self.config.save_path)
+
             save_file_name = f"/prof_start_{self.tool_config.step_start}_end_{self.tool_config.step_end}_rank_{self.rank}.json"
             print(f"[Profiler] Saving trace to {self.config.save_path + save_file_name}")
             self.prof.export_chrome_trace(self.config.save_path + save_file_name)
+
+            save_file_name = f"/memory_snapshot_rank_{self.rank}.pickle"
+            print(f"[Profiler] Saving memory snapshot to {self.config.save_path + save_file_name}")
+            torch.cuda.memory._dump_snapshot(self.config.save_path + save_file_name)
+
             self.enable = False
             self.saved = True
 

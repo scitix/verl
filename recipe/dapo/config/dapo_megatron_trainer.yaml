@@ -1,6 +1,6 @@
 hydra:
   searchpath:
-    - file://verl/trainer/config
+    - file:///mnt/hisys-data/chengke/ai4s-job-system/submodules/verl/verl/trainer/config
 
 defaults:
   - ppo_megatron_trainer

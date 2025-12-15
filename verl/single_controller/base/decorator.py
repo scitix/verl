@@ -287,6 +287,9 @@ def dispatch_lazy_compute_data_proto(mesh_name, worker_group, *args, **kwargs):
     dp_rank_mapping = worker_group._dispatch_info[mesh_name]
     # perform dispatch
     dp_size = max(dp_rank_mapping) + 1
+
+    print(f"=== dispatch_nd_compute_dataproto === {dp_rank_mapping=} {dp_size=} {worker_group._dispatch_info=}")
+
     return dispatch_nd_compute_dataproto(dp_rank_mapping, dp_size, worker_group, *args, **kwargs)
 
 
