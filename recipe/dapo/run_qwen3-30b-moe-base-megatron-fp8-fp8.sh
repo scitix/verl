@@ -3,8 +3,7 @@ set -xeuo pipefail
 pwd=/volume/data/tldu/new/ai4s-job-system/submodules/verl/
 
 rollout_name="vllm" # sglang or vllm
-train_dtype="bfloat16" # ["bfloat16", "float16"]
-rollout_dtype="bfloat16" 
+
 
 project_name='FP16'
 experiment_name='DAPO-Qwen3-30B-MoE-Base-fp8-fp8'
@@ -111,7 +110,6 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     data.truncation='left' \
     data.seed=42 \
     actor_rollout_ref.rollout.name=${rollout_name} \
-    actor_rollout_ref.actor.megatron.dtype=${train_dtype} \
     data.max_prompt_length=${max_prompt_length} \
     data.max_response_length=${max_response_length} \
     data.train_batch_size=${train_prompt_bsz} \
@@ -180,20 +178,6 @@ ray job submit --runtime-env="${RUNTIME_ENV}" \
     actor_rollout_ref.rollout.calculate_log_probs=True \
     +actor_rollout_ref.rollout.quantization=fp8 \
     actor_rollout_ref.actor.router_replay.mode="R2" \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.apply_rope_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.masked_softmax_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.bias_activation_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.bias_dropout_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.gradient_accumulation_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.deallocate_pipeline_outputs=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.persist_layer_norm=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_grouped_gemm=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_permute_fusion=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_token_dispatcher_type="flex" \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_router_dtype=fp32 \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.moe_enable_deepep=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.account_for_loss_in_pipeline_split=True \
-    +actor_rollout_ref.actor.megatron.override_transformer_config.account_for_embedding_in_pipeline_split=True \
     +actor_rollout_ref.actor.megatron.override_transformer_config.fp8="e4m3" \
     +actor_rollout_ref.actor.megatron.override_transformer_config.fp8_recipe="blockwise" \
     +actor_rollout_ref.actor.optim.override_optimizer_config.fp8_recipe="blockwise" \
