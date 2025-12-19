@@ -32,6 +32,7 @@
 Implementations of the linear cross entropy with token entropy kernel.
 """
 
+import time
 import typing
 from dataclasses import dataclass
 
@@ -515,6 +516,17 @@ def efficient_entropy_forward(
     """
     forward host function
     """
+    # Log input information for debugging
+    print(f"[efficient_entropy_forward] Input shapes and dtypes:")
+    print(f"  hidden: shape={hidden.shape}, dtype={hidden.dtype}, device={hidden.device}, is_contiguous={hidden.is_contiguous()}")
+    print(f"  weight: shape={weight.shape}, dtype={weight.dtype}, device={weight.device}, is_contiguous={weight.is_contiguous()}")
+    print(f"  labels: shape={labels.shape}, dtype={labels.dtype}, device={labels.device}, is_contiguous={labels.is_contiguous()}")
+    print(f"  reduction={reduction}, temperature={temperature}")
+    if dist_process_group is not None:
+        print(f"  dist_process_group: rank={dist.get_rank(dist_process_group)}, world_size={dist.get_world_size(dist_process_group)}")
+    else:
+        print(f"  dist_process_group: None")
+    
     assert hidden.is_cuda and weight.is_cuda and labels.is_cuda
     assert weight.device == hidden.device and labels.device == hidden.device
     assert hidden.dim() == 2 and weight.dim() == 2 and labels.dim() == 1
@@ -574,11 +586,21 @@ def efficient_entropy_forward(
     assert _accu.is_contiguous() and _entropy_b.is_contiguous() and _max.is_contiguous()
     assert _accu.is_cuda and _entropy_b.is_cuda and _max.is_cuda
 
+    # Log kernel launch parameters
+    print(f"[efficient_entropy_forward] Kernel launch parameters:")
+    print(f"  num_tokens={num_tokens}, hidden_size={hidden_size}, vocab_size={vocab_size}")
+    print(f"  vocab_per_split={vocab_per_split}, num_splits={num_splits}")
+    print(f"  reduction enum={REDUCTION}, _rank={_rank}, _world_size={_world_size}")
+    print(f"  _max shape={_max.shape}, _accu shape={_accu.shape}, _entropy_b shape={_entropy_b.shape}")
+    print(f"  _logprobs shape={_logprobs.shape}, logprobs shape={logprobs.shape}")
+
     if _config._use_triton:
         # 1D kernel launch, then split the tile
         def mainloop_grid(meta):
             return (triton.cdiv(num_tokens, meta["BLOCK_SIZE_M"]) * num_splits,)
 
+        print(f"[efficient_entropy_forward] Launching mainloop kernel: num_tokens={num_tokens}, num_splits={num_splits}")
+        kernel_start_time = time.time()
         efficient_entropy_kernel_general_mainloop[mainloop_grid](
             _rank,
             hidden,
@@ -606,6 +628,8 @@ def efficient_entropy_forward(
             logprobs,
             1.0 / temperature,
         )
+        kernel_end_time = time.time()
+        print(f"[efficient_entropy_forward] Mainloop kernel completed in {(kernel_end_time - kernel_start_time) * 1000:.2f} ms")
     else:
         raise AssertionError("Triton is required for efficient entropy kernel")
 
@@ -613,6 +637,8 @@ def efficient_entropy_forward(
     def epilogue_grid(meta):
         return (triton.cdiv(num_tokens, meta["BLOCK_SIZE_M"]),)
 
+    print(f"[efficient_entropy_forward] Launching epilogue kernel: num_tokens={num_tokens}, num_splits={num_splits}")
+    epilogue_start_time = time.time()
     if dist_process_group is None:
         efficient_entropy_triton_kernel_epilogue[epilogue_grid](
             _max,
@@ -639,6 +665,8 @@ def efficient_entropy_forward(
             logprobs,
             REDUCTION,
         )
+        epilogue_end_time = time.time()
+        print(f"[efficient_entropy_forward] Epilogue kernel completed in {(epilogue_end_time - epilogue_start_time) * 1000:.2f} ms")
     else:
         # tensor-parallel
         _max_backup = _max.clone()
@@ -692,7 +720,11 @@ def efficient_entropy_forward(
             logprobs,
             REDUCTION,
         )
+        epilogue_end_time = time.time()
+        print(f"[efficient_entropy_forward] Epilogue TP kernels completed in {(epilogue_end_time - epilogue_start_time) * 1000:.2f} ms")
 
+    total_end_time = time.time()
+    print(f"[efficient_entropy_forward] Total kernel execution completed")
     return (logprobs, entropy, maximum, accumulate, entropy_b)
 
 
